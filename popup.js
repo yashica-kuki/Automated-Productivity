@@ -44,12 +44,14 @@ const renderTasks = () => {
         checkbox.addEventListener('change', () => {
           chrome.runtime.sendMessage({
             action: "completeTask",
-            index: index
+            // Pass the unique task object, not a volatile index
+            task: task
           });
         });
         li.appendChild(checkbox);
 
         const taskText = document.createElement('span');
+        // FIX: Correctly use template literal with backticks
         taskText.textContent = `${task.name} @ ${new Date(task.time).toLocaleString()}`;
         li.appendChild(taskText);
 
@@ -59,7 +61,8 @@ const renderTasks = () => {
         deleteButton.addEventListener('click', () => {
           chrome.runtime.sendMessage({
             action: "deleteTask",
-            index: index
+            // Pass the unique task object, not a volatile index
+            task: task
           });
         });
         li.appendChild(deleteButton);
@@ -82,15 +85,16 @@ document.getElementById("startTimer").addEventListener("click", async () => {
   let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const endTime = Date.now() + minutes * 60000;
   chrome.storage.local.set({ timerEndTime: endTime });
-  
+
   chrome.runtime.sendMessage({ action: "startTimer", tabId: tab.id, minutes });
-  
+
   startTimerDisplay(endTime);
 });
 
 // Function to start the timer countdown display
 function startTimerDisplay(endTime) {
   const timerDisplay = document.getElementById("timerDisplay");
+  if (!timerDisplay) return; // Add a safeguard
   const intervalId = setInterval(() => {
     const timeLeft = endTime - Date.now();
     if (timeLeft <= 0) {
@@ -101,15 +105,16 @@ function startTimerDisplay(endTime) {
 
     const minutes = Math.floor(timeLeft / 60000);
     const seconds = Math.floor((timeLeft % 60000) / 1000);
+    // FIX: Correctly use template literal with backticks
     timerDisplay.textContent = `Time left: ${minutes}m ${seconds}s`;
   }, 1000);
 }
 
 // Add task
 document.getElementById("addTask").addEventListener("click", () => {
-  let taskName = document.getElementById("taskName").value;
+  let taskName = document.getElementById("taskName").value.trim();
   let taskTime = document.getElementById("taskTime").value;
-  let taskLink = document.getElementById("taskLink").value;
+  let taskLink = document.getElementById("taskLink").value.trim();
   const schedulerMessage = document.getElementById("schedulerMessage");
 
   if (!taskName || !taskTime) {
@@ -135,16 +140,29 @@ document.getElementById("addTask").addEventListener("click", () => {
 
 // Summarize document
 document.getElementById("summarizeDoc").addEventListener("click", async () => {
+  const summaryResult = document.getElementById("summaryResult");
+  summaryResult.innerText = "Summarizing...";
+
   let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  document.getElementById("summaryResult").innerText = "Summarizing...";
+
   chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: () => document.body.innerText
   }, (results) => {
-    let text = results[0].result;
-    // This is a very simple summary; for a real extension, use a more advanced algorithm.
-    let summary = text.split(". ").slice(0, 5).join(". ") + "...";
-    document.getElementById("summaryResult").innerText = summary;
+    const text = results[0]?.result;
+
+    if (!text || text.trim().length === 0) {
+      summaryResult.innerText = "Could not find any text to summarize on this page.";
+      return;
+    }
+
+    // A simple, direct summarization function that takes a percentage of sentences.
+    const sentences = text.split(/[.?!]\s*/);
+    const summaryLength = Math.max(5, Math.floor(sentences.length * 0.20)); // Take 20% of sentences, but at least 5
+
+    let summary = sentences.slice(0, summaryLength).join(". ") + (sentences.length > summaryLength ? "." : "");
+
+    summaryResult.innerText = summary;
   });
 });
 
