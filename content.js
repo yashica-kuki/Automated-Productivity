@@ -1,0 +1,1 @@
+// Placeholder for page-level scripts (e.g., advanced summarizer injection)
