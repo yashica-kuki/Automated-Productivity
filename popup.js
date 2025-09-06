@@ -28,24 +28,21 @@ const renderTasks = () => {
     if (tasks.length === 0) {
       taskList.innerHTML = '<li>No tasks scheduled.</li>';
     } else {
-      tasks.forEach((task, index) => {
+      tasks.forEach((task) => {
         let li = document.createElement("li");
         li.className = task.completed ? 'completed' : '';
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.checked = task.completed;
         checkbox.addEventListener('change', () => {
-          tasks[index].completed = checkbox.checked;
-          chrome.storage.local.set({ tasks });
+          chrome.runtime.sendMessage({ action: "completeTask", task: task });
         });
         const taskText = document.createElement('span');
         taskText.textContent = `${task.name} @ ${new Date(task.time).toLocaleString()}`;
         const deleteButton = document.createElement('button');
         deleteButton.textContent = 'Delete';
         deleteButton.addEventListener('click', () => {
-          chrome.runtime.sendMessage({ action: "deleteTask", task: tasks[index] });
-          tasks.splice(index, 1);
-          chrome.storage.local.set({ tasks });
+          chrome.runtime.sendMessage({ action: "deleteTask", task: task });
         });
         li.appendChild(checkbox);
         li.appendChild(taskText);
@@ -109,7 +106,10 @@ const handleStartTimer = (minutesStr) => {
 
 const handleSummarizeDoc = () => {
   const summaryResult = document.getElementById("summaryResult");
+  const saveSummaryButton = document.getElementById("saveSummary");
   summaryResult.innerText = "Summarizing page content...";
+  saveSummaryButton.disabled = true;
+
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
     chrome.scripting.executeScript({
       target: { tabId: tabs[0].id },
@@ -121,6 +121,9 @@ const handleSummarizeDoc = () => {
       }
       chrome.runtime.sendMessage({ action: "summarizeText", text: results[0].result }, (response) => {
         summaryResult.innerText = response?.summary || "Failed to generate summary.";
+        if (response?.summary) {
+          saveSummaryButton.disabled = false;
+        }
       });
     });
   });
@@ -145,6 +148,21 @@ const handleAddTask = (taskName, taskTime, taskLink) => {
   });
 };
 
+const handleSaveSummary = () => {
+  const summaryText = document.getElementById("summaryResult").innerText;
+  const summaryMessage = document.getElementById("summaryMessage");
+  if (!summaryText || summaryText === "Summarizing page content...") {
+    summaryMessage.textContent = "No summary to save.";
+    return;
+  }
+  summaryMessage.textContent = "Saving to Google Docs...";
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const pageTitle = tabs[0].title;
+    chrome.runtime.sendMessage({ action: "saveSummaryToDocs", summary: summaryText, title: pageTitle }, (response) => {
+      summaryMessage.textContent = response.message;
+    });
+  });
+};
 
 // --- Event Listeners ---
 chrome.storage.onChanged.addListener((changes, areaName) => {
@@ -166,11 +184,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("startTimer").addEventListener("click", () => handleStartTimer(document.getElementById("timerMinutes").value));
   document.getElementById("summarizeDoc").addEventListener("click", handleSummarizeDoc);
+  document.getElementById("saveSummary").addEventListener("click", handleSaveSummary);
   document.getElementById("addTask").addEventListener("click", () => handleAddTask(
     document.getElementById("taskName").value,
     document.getElementById("taskTime").value,
     document.getElementById("taskLink").value
   ));
-  document.getElementById("syncCalendarButton").addEventListener("click", () => chrome.runtime.sendMessage({ action: "syncCalendar" }));
-  document.getElementById("clearCompletedTasks").addEventListener("click", () => chrome.runtime.sendMessage({ action: "clearCompletedTasks" }));
+  
+  document.getElementById("syncCalendarButton").addEventListener("click", () => {
+    const schedulerMessage = document.getElementById("schedulerMessage");
+    schedulerMessage.textContent = "Syncing...";
+    chrome.runtime.sendMessage({ action: "syncCalendar" }, (response) => {
+      if (response) {
+        schedulerMessage.textContent = response.message;
+      } else {
+        schedulerMessage.textContent = "Sync failed: No response from background.";
+      }
+    });
+  });
 });

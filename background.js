@@ -1,5 +1,58 @@
 // --- Globals & Constants ---
-const GEMINI_API_KEY = "AIzaSyD3txTEBjDLVkncKPEOEkECstpHBzBwppo"; // IMPORTANT: Replace with your actual key
+const GEMINI_API_KEY = "AIzaSyBE5ix4UL05HnIp5xreP5OkoALNIdQajbg";
+
+// --- Google Docs & Auth Functions ---
+const createGoogleDoc = (title, summary, token, sendResponse) => {
+  const doc = {
+    title: `Summary of "${title}"`,
+  };
+
+  fetch('https://docs.googleapis.com/v1/documents', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(doc)
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      console.error('Google Docs API error:', data.error);
+      sendResponse({ success: false, message: `Error: ${data.error.message}` });
+      return;
+    }
+    const documentId = data.documentId;
+    const requests = [{
+      insertText: {
+        location: { index: 1 },
+        text: summary
+      }
+    }];
+    return fetch(`https://docs.googleapis.com/v1/documents/${documentId}:batchUpdate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests })
+    });
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.error) {
+      console.error('Google Docs API update error:', data.error);
+      sendResponse({ success: false, message: `Error updating doc: ${data.error.message}` });
+    } else {
+      console.log('Document created:', data);
+      sendResponse({ success: true, message: "Successfully saved to Google Docs!" });
+    }
+  })
+  .catch(error => {
+    console.error('Failed to create Google Doc:', error);
+    sendResponse({ success: false, message: "Failed to create Google Doc." });
+  });
+};
 
 // --- Google Calendar & Auth Functions ---
 const createCalendarEvent = (task, token) => {
@@ -43,27 +96,39 @@ const authenticateAndCreateEvent = (task) => {
 };
 
 const deleteCalendarEvent = (eventId, token) => {
+  if (!eventId) return;
   fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
     method: 'DELETE',
     headers: { 'Authorization': 'Bearer ' + token },
   })
   .then(response => {
-    if (response.ok) console.log(`Event with ID ${eventId} deleted.`);
-    else console.error('Failed to delete Google Calendar event:', response.statusText);
+    if (response.ok) {
+      console.log(`Event with ID ${eventId} deleted.`);
+    } else {
+      console.error('Failed to delete Google Calendar event:', response.statusText);
+    }
   })
   .catch(error => console.error('Error deleting event:', error));
 };
 
-const syncWithCalendar = () => {
-  chrome.identity.getAuthToken({ interactive: false }, (token) => {
-    if (chrome.runtime.lastError || !token) return console.log("Could not get auth token for sync.");
+const syncWithCalendar = (sendResponse) => {
+  chrome.identity.getAuthToken({ interactive: true }, (token) => {
+    if (chrome.runtime.lastError || !token) {
+        console.error("Could not get auth token for sync:", chrome.runtime.lastError.message);
+        sendResponse({ success: false, message: "Sync failed: Could not log in." });
+        return;
+    }
     const syncTime = new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString();
     const listEventsUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${syncTime}&orderBy=updated&singleEvents=true`;
 
     fetch(listEventsUrl, { method: 'GET', headers: { 'Authorization': 'Bearer ' + token } })
     .then(response => response.json())
     .then(data => {
-      if (data.error) return console.error('Sync error:', data.error);
+      if (data.error) {
+        console.error('Sync error:', data.error);
+        sendResponse({ success: false, message: `Sync failed: ${data.error.message}` });
+        return;
+      }
       const calendarEvents = data.items || [];
       chrome.storage.local.get('tasks', (storageData) => {
         let tasks = storageData.tasks || [];
@@ -80,29 +145,33 @@ const syncWithCalendar = () => {
           if (existingTaskIndex > -1) tasks[existingTaskIndex] = newOrUpdatedTask;
           else tasks.push(newOrUpdatedTask);
         });
-        chrome.storage.local.set({ tasks });
+        chrome.storage.local.set({ tasks }, () => {
+          sendResponse({ success: true, message: "Sync successful!" });
+        });
       });
+    })
+    .catch(error => {
+      console.error("Fetch error during sync:", error);
+      sendResponse({ success: false, message: "Sync failed: Network error." });
     });
   });
 };
 
 
 // --- Alarms & Listeners ---
-chrome.alarms.create("calendarSyncAlarm", { periodInMinutes: 2});
+chrome.alarms.create("calendarSyncAlarm", { periodInMinutes: 5 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "calendarSyncAlarm") {
-    syncWithCalendar();
+    syncWithCalendar(() => {}); // Background sync doesn't need to send a response
   } else if (alarm.name.startsWith("timer_")) {
     const tabId = parseInt(alarm.name.split("_")[1], 10);
     chrome.tabs.get(tabId, (tab) => {
       if (tab && tab.url) {
         chrome.storage.local.set({ closedTabUrl: tab.url, closedTabTitle: tab.title });
         chrome.notifications.create({
-          type: "basic",
-          iconUrl: "icon.png",
-          title: "Time's Up!",
-          message: `The timer for "${tab.title}" has ended.`
+          type: "basic", iconUrl: "icon.png",
+          title: "Time's Up!", message: `The timer for "${tab.title}" has ended.`
         });
         chrome.tabs.remove(tabId);
       }
@@ -113,39 +182,28 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       const task = (data.tasks || []).find(t => t.id === `task_${taskId}`);
       if (task) {
         chrome.notifications.create(`notification_${task.id}`, {
-          type: "basic",
-          iconUrl: "icon.png",
-          title: "Upcoming Task",
-          message: `Your task "${task.name}" is scheduled now.`,
-          // --- CHANGED HERE ---
-          // Updated to show "Allow" and "Not Allow" buttons if a link exists.
-          buttons: task.link ? [{ title: "Allow" }, { title: "Not Allow" }] : []
+          type: "basic", iconUrl: "icon.png",
+          title: "Upcoming Task", message: `Your task "${task.name}" is scheduled now.`,
+          buttons: task.link ? [{ title: "Open Link" }, { title: "Dismiss" }] : []
         });
       }
     });
   }
 });
 
-// --- CHANGED HERE ---
-// Updated to handle different button clicks.
 chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-  if (notificationId.startsWith("notification_")) {
-    // buttonIndex 0 is the first button ("Allow")
-    if (buttonIndex === 0) {
-      const taskId = notificationId.split("_")[1];
-      chrome.storage.local.get('tasks', (data) => {
-        const task = (data.tasks || []).find(t => t.id === `task_${taskId}`);
-        if (task && task.link) {
-          chrome.tabs.create({ url: task.link });
-        }
-      });
-    }
-    
-    // For both "Allow" (index 0) and "Not Allow" (index 1), we clear the notification.
+  if (notificationId.startsWith("notification_") && buttonIndex === 0) {
+    const taskId = notificationId.split("_")[1];
+    chrome.storage.local.get('tasks', (data) => {
+      const task = (data.tasks || []).find(t => t.id === `task_${taskId}`);
+      if (task && task.link) chrome.tabs.create({ url: task.link });
+    });
     chrome.notifications.clear(notificationId);
   }
 });
 
+
+// In demo-CYHI/background.js
 
 // --- Central Message Handler ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -158,31 +216,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       chrome.storage.local.get({ tasks: [] }, (data) => {
         const newTaskId = Date.now();
         const newTask = { ...request.task, id: `task_${newTaskId}` };
-        const updatedTasks = [...data.tasks, newTask];
-        chrome.storage.local.set({ tasks: updatedTasks }, () => {
-          const taskTime = new Date(newTask.time).getTime();
-          if (taskTime > Date.now()) {
-            chrome.alarms.create(`notification_${newTaskId}`, { when: taskTime });
-          }
+        chrome.storage.local.set({ tasks: [...data.tasks, newTask] }, () => {
           authenticateAndCreateEvent(newTask);
-          sendResponse({ message: "Task added and sync initiated." });
+          sendResponse({ message: "Task added." });
         });
       });
       return true;
 
+    case "completeTask":
     case "deleteTask":
-      chrome.identity.getAuthToken({ interactive: false }, (token) => {
-        if (token && request.task.googleEventId) {
+      chrome.identity.getAuthToken({ interactive: true }, (token) => {
+        if (chrome.runtime.lastError || !token) {
+          return console.error("Could not get token to delete event:", chrome.runtime.lastError.message);
+        }
+        if (request.task.googleEventId) {
           deleteCalendarEvent(request.task.googleEventId, token);
         }
       });
-      break;
-
-    case "clearCompletedTasks":
-      chrome.storage.local.get({ tasks: [] }, (data) => {
-        let activeTasks = data.tasks.filter(task => !task.completed);
-        chrome.storage.local.set({ tasks: activeTasks });
-      });
+      // If deleting, also remove from storage
+      if (request.action === 'deleteTask' || request.action === 'completeTask') {
+          chrome.storage.local.get({ tasks: [] }, (data) => {
+              const newTasks = data.tasks.filter(t => t.id !== request.task.id);
+              chrome.storage.local.set({ tasks: newTasks });
+          });
+      }
       break;
 
     case "summarizeText":
@@ -196,14 +253,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(error => sendResponse({ summary: "Error generating summary." }));
       return true;
       
+    case "saveSummaryToDocs":
+      chrome.identity.getAuthToken({ interactive: true }, (token) => {
+        if (chrome.runtime.lastError || !token) {
+          sendResponse({ success: false, message: "Authentication failed." });
+          return;
+        }
+        createGoogleDoc(request.title, request.summary, token, sendResponse);
+      });
+      return true;
+
     case "syncCalendar":
-      syncWithCalendar();
-      break;
+      syncWithCalendar(sendResponse);
+      return true;
       
     case "restoreTab":
-      if (request.url) {
-        chrome.tabs.create({ url: request.url });
-      }
+      if (request.url) chrome.tabs.create({ url: request.url });
       break;
   }
+  return true;
 });

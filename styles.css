@@ -253,3 +253,9 @@ input:focus {
   font-size: 12px;
   cursor: pointer;
 }
+/* Add this new class to the end of your file */
+#taskList li.disappearing {
+  transition: all 0.5s ease-out;
+  opacity: 0;
+  transform: translateX(-30px);
+}
