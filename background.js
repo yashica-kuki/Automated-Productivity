@@ -163,7 +163,7 @@ chrome.alarms.create("calendarSyncAlarm", { periodInMinutes: 5 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "calendarSyncAlarm") {
-    syncWithCalendar(() => {}); // Background sync doesn't need to send a response
+    syncWithCalendar(() => {});
   } else if (alarm.name.startsWith("timer_")) {
     const tabId = parseInt(alarm.name.split("_")[1], 10);
     chrome.tabs.get(tabId, (tab) => {
@@ -192,18 +192,19 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
+  // **FIX:** Correctly extract the full task ID from the notification ID
   if (notificationId.startsWith("notification_") && buttonIndex === 0) {
-    const taskId = notificationId.split("_")[1];
+    const fullTaskId = notificationId.substring("notification_".length);
     chrome.storage.local.get('tasks', (data) => {
-      const task = (data.tasks || []).find(t => t.id === `task_${taskId}`);
-      if (task && task.link) chrome.tabs.create({ url: task.link });
+      const task = (data.tasks || []).find(t => t.id === fullTaskId);
+      if (task && task.link) {
+        chrome.tabs.create({ url: task.link });
+      }
     });
     chrome.notifications.clear(notificationId);
   }
 });
 
-
-// In demo-CYHI/background.js
 
 // --- Central Message Handler ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -216,6 +217,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       chrome.storage.local.get({ tasks: [] }, (data) => {
         const newTaskId = Date.now();
         const newTask = { ...request.task, id: `task_${newTaskId}` };
+        
+        const scheduledTime = new Date(newTask.time).getTime();
+        if (scheduledTime > Date.now()) {
+            chrome.alarms.create(`notification_${newTaskId}`, { when: scheduledTime });
+        }
+
         chrome.storage.local.set({ tasks: [...data.tasks, newTask] }, () => {
           authenticateAndCreateEvent(newTask);
           sendResponse({ message: "Task added." });
@@ -233,7 +240,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           deleteCalendarEvent(request.task.googleEventId, token);
         }
       });
-      // If deleting, also remove from storage
       if (request.action === 'deleteTask' || request.action === 'completeTask') {
           chrome.storage.local.get({ tasks: [] }, (data) => {
               const newTasks = data.tasks.filter(t => t.id !== request.task.id);
