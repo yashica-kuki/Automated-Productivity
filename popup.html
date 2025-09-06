@@ -3,48 +3,68 @@
 <head>
   <title>Productivity Tools</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 </head>
 <body>
-  <h2>Productivity Tools</h2>
+  <div class="container">
+    <header>
+      <h2><i class="fa-solid fa-leaf"></i> Productivity Tools <i class="fa-solid fa-leaf"></i></h2>
+      <p>Automate your workflow with style</p>
+    </header>
 
-  <div class="tabs">
-    <button class="tab-button active" data-tab="timer">Timer</button>
-    <button class="tab-button" data-tab="scheduler">Scheduler</button>
-    <button class="tab-button" data-tab="summarizer">Summarizer</button>
-  </div>
-
-  <div id="timer" class="tab-content active">
-    <h3>Website Timer</h3>
-    <input type="number" id="timerMinutes" placeholder="Minutes">
-    <button id="startTimer">Start Timer</button>
-    <div id="timerMessage" class="message error-message"></div>
-    <div id="timerDisplay" class="info-message"></div>
-    <div id="restoreContainer" style="display: none; margin-top: 15px;">
-        <h3>Tab Closed by Timer</h3>
-        <p id="restoreMessage"></p>
-        <button id="restoreTabButton">Restore Last Tab</button>
+    <div class="tabs">
+      <button class="tab-button active" data-tab="timer"><i class="fa-regular fa-clock"></i> Timer</button>
+      <button class="tab-button" data-tab="scheduler"><i class="fa-regular fa-calendar-days"></i> Scheduler</button>
+      <button class="tab-button" data-tab="summarizer"><i class="fa-regular fa-file-lines"></i> Summarizer</button>
     </div>
-  </div>
 
-  <div id="scheduler" class="tab-content">
-    <h3>Task Scheduler</h3>
-    <div class="input-group">
-      <input type="text" id="taskName" placeholder="Task name">
-      <input type="datetime-local" id="taskTime">
-      <input type="url" id="taskLink" placeholder="(Optional) Meeting Link">
-      <button id="addTask">Add Task</button>
-      <button id="syncCalendarButton" style="background-color: #f39c12;">Sync with Calendar</button>
-    </div>
-    <div id="schedulerMessage" class="message error-message"></div>
-    <ul id="taskList"></ul>
-  </div>
+    <main class="content-box">
+      <div id="timer" class="tab-content active">
+        <h3>Website Timer</h3>
+        <p class="subtitle">Focus and track your productive sessions</p>
+        <div class="timer-input-group">
+          <input type="number" id="timerMinutes" placeholder="Enter minutes...">
+          <button id="startTimer" class="btn btn-primary"><i class="fa-solid fa-play"></i> Start Session</button>
+        </div>
+        <div id="timerDisplay" class="info-message"></div>
+        <div id="timerMessage" class="message error-message"></div>
+        <div id="restoreContainer" style="display: none;">
+          <h3>Tab Closed by Timer</h3>
+          <p id="restoreMessage"></p>
+          <button id="restoreTabButton" class="btn btn-secondary">Restore Last Tab</button>
+        </div>
+      </div>
 
-  <div id="summarizer" class="tab-content">
-    <h3>Document Summarizer</h3>
-    <button id="summarizeDoc">Summarize</button>
-    <p id="summaryResult" class="info-message"></p>
-  </div>
+      <div id="scheduler" class="tab-content">
+        <h3>Task Scheduler</h3>
+        <div class="input-group">
+          <label for="taskName">Task Name</label>
+          <input type="text" id="taskName" placeholder="E.g., Team Standup">
+          <label for="taskTime">Date & Time</label>
+          <input type="datetime-local" id="taskTime">
+          <label for="taskLink">Meeting Link (Optional)</label>
+          <input type="url" id="taskLink" placeholder="https://meet.google.com/xyz-abc">
+        </div>
+        <div class="button-group">
+          <button id="addTask" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Task</button>
+        </div>
+        <div class="button-group">
+          <button id="syncCalendarButton" class="btn btn-secondary"><i class="fa-solid fa-arrows-rotate"></i> Sync Calendar</button>
+          
+        </div>
+        <div id="schedulerMessage" class="message"></div>
+        <ul id="taskList"></ul>
+      </div>
 
+      <div id="summarizer" class="tab-content">
+        <h3>Document Summarizer</h3>
+        <div class="button-group">
+          <button id="summarizeDoc" class="btn btn-secondary"><i class="fa-solid fa-wand-magic-sparkles"></i> Summarize Page</button>
+        </div>
+        <p id="summaryResult" class="info-message"></p>
+      </div>
+    </main>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>
