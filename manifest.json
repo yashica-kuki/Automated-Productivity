@@ -3,8 +3,8 @@
   "name": "Multi-Tool Productivity Extension",
   "version": "1.1",
   "description": "Website timer, task scheduler, document summarizer, and meeting auto-opener with notifications.",
-  "permissions": ["tabs", "scripting", "storage", "alarms", "notifications"],
-  "host_permissions": ["<all_urls>", "https://api.mocki.io/*"],
+  "permissions": ["tabs", "scripting", "storage", "alarms", "notifications", "sessions", "identity"],
+  "host_permissions": ["<all_urls>", "https://www.googleapis.com/*", "https://generativelanguage.googleapis.com/*"],
   "background": {
     "service_worker": "background.js"
   },
@@ -17,5 +17,11 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"]
     }
-  ]
+  ],
+  "oauth2": {
+    "client_id": "968041906365-r5mek6ovr9rgtho51jeqhejk8f3klqek.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.events"
+    ]
+  }
 }
